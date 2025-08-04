@@ -1,0 +1,252 @@
+<!DOCTYPE html>
+<html lang="ko">
+
+<head>
+    <meta charset="UTF-8">
+    <link rel="icon" type="image/x-icon" href="/icon.ico" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PDF Manager | PDF관리도구</title>
+
+    <!-- SEO & OG Meta Tags -->
+    <meta name="description" content="무료로 PDF를 다루세요! PDF 합치기, 페이지 추출, 워터마크 추가 등 다양한 기능을 제공합니다.">
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="PDF Manager | PDF관리도구" />
+    <meta property="og:description" content="무료로 PDF를 다루세요" />
+    <meta property="og:image" content="/pdf_manager_logo.png" />
+    <!-- <meta property="og:url" content="https://여러분의_최종_사이트_주소" /> -->
+
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/sortablejs@latest/Sortable.min.js"></script>
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            /* ### 수정: 배경 그라데이션 추가 ### */
+            background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+        }
+
+        /* ### 신규: 배경 캔버스 스타일 ### */
+        #background-canvas {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: -1;
+            /* 다른 콘텐츠 뒤에 위치 */
+        }
+
+        .menu-button {
+            transition: all 0.2s ease-in-out;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+
+        .menu-button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 12px rgba(0, 0, 0, 0.15);
+        }
+
+        .loader {
+            border: 5px solid #f3f3f3;
+            border-top: 5px solid #3498db;
+            border-radius: 50%;
+            width: 50px;
+            height: 50px;
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            0% {
+                transform: rotate(0deg);
+            }
+
+            100% {
+                transform: rotate(360deg);
+            }
+        }
+
+        .drop-zone {
+            border: 2px dashed #ccc;
+            transition: all 0.3s;
+        }
+
+        .drop-zone.dragover {
+            border-color: #3498db;
+            background-color: #f0f8ff;
+        }
+
+        .preview-page {
+            border: 2px solid transparent;
+            cursor: grab;
+            transition: all 0.2s;
+            background-color: white;
+        }
+
+        .preview-page:active {
+            cursor: grabbing;
+        }
+
+        .preview-page.selected {
+            border-color: #3498db;
+            box-shadow: 0 0 10px rgba(52, 152, 219, 0.5);
+            transform: scale(1.02);
+        }
+
+        .preview-page canvas,
+        .preview-page img {
+            max-width: 100%;
+            height: auto;
+            display: block;
+        }
+
+        .sortable-ghost {
+            opacity: 0.4;
+            background: #c8ebfb;
+        }
+
+        #toast-container {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            z-index: 9999;
+        }
+
+        .toast {
+            background-color: #333;
+            color: #fff;
+            padding: 15px 20px;
+            border-radius: 8px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+            margin-bottom: 10px;
+            opacity: 0;
+            transform: translateY(-20px);
+            transition: all 0.3s ease-out;
+        }
+
+        .toast.show {
+            opacity: 1;
+            transform: translateY(0);
+        }
+
+        .toast.success {
+            background-color: #2ecc71;
+        }
+
+        .toast.error {
+            background-color: #e74c3c;
+        }
+    </style>
+    <link rel="stylesheet" href="https://rsms.me/inter/inter.css">
+</head>
+
+<body class="flex items-center justify-center min-h-screen p-4">
+
+    <!-- ### 신규: 배경 애니메이션 캔버스 ### -->
+    <canvas id="background-canvas"></canvas>
+
+    <div class="w-full max-w-6xl bg-white/80 backdrop-blur-sm rounded-2xl shadow-xl p-6 md:p-10">
+
+        <header class="text-center mb-8 relative">
+            <h1 class="text-4xl font-bold text-gray-800">PDF 도구 모음 Pro</h1>
+            <p class="text-gray-500 mt-2">더 강력해진 PDF 편집 기능을 만나보세요.</p>
+            <button id="home-button"
+                class="absolute top-0 left-0 bg-gray-200 hover:bg-gray-300 text-gray-700 font-bold py-2 px-4 rounded-lg hidden">홈</button>
+        </header>
+
+        <div id="status-container" class="text-center my-4 hidden">
+            <div id="loader" class="loader mx-auto"></div>
+            <p id="status-message" class="mt-4 text-lg text-blue-600 font-semibold"></p>
+            <div id="progress-bar-container" class="w-full bg-gray-200 rounded-full h-4 mt-4 hidden">
+                <div id="progress-bar" class="bg-blue-500 h-4 rounded-full text-xs text-white text-center leading-none"
+                    style="width: 0%">0%</div>
+            </div>
+        </div>
+
+        <main id="main-menu">
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                <button data-operation="merge"
+                    class="menu-button bg-blue-500 hover:bg-blue-600 text-white font-bold py-6 px-4 rounded-lg">PDF 파일
+                    합치기</button>
+                <button data-operation="extract"
+                    class="menu-button bg-green-500 hover:bg-green-600 text-white font-bold py-6 px-4 rounded-lg">페이지
+                    추출</button>
+                <button data-operation="deleteReorder"
+                    class="menu-button bg-yellow-500 hover:bg-yellow-600 text-white font-bold py-6 px-4 rounded-lg">페이지
+                    삭제/순서 변경</button>
+                <button data-operation="addWatermark"
+                    class="menu-button bg-teal-500 hover:bg-teal-600 text-white font-bold py-6 px-4 rounded-lg">워터마크
+                    추가</button>
+                <button data-operation="imageToPdf"
+                    class="menu-button bg-cyan-500 hover:bg-cyan-600 text-white font-bold py-6 px-4 rounded-lg">이미지를
+                    PDF로</button>
+                <button data-operation="compress"
+                    class="menu-button bg-orange-500 hover:bg-orange-600 text-white font-bold py-6 px-4 rounded-lg">PDF
+                    압축</button>
+                <button data-operation="unlock"
+                    class="menu-button bg-purple-500 hover:bg-purple-600 text-white font-bold py-6 px-4 rounded-lg">암호
+                    해제</button>
+                <button data-operation="addCover"
+                    class="menu-button bg-indigo-500 hover:bg-indigo-600 text-white font-bold py-6 px-4 rounded-lg">표지
+                    추가</button>
+            </div>
+        </main>
+
+        <section id="operation-view" class="hidden">
+            <h2 id="operation-title"
+                class="text-2xl font-bold text-blue-800 mb-4 p-4 bg-blue-100 rounded-lg text-center"></h2>
+
+            <div class="flex flex-col md:flex-row gap-6">
+                <div id="control-pane"
+                    class="w-full md:w-1/3 bg-gray-50 p-6 rounded-lg border border-gray-200 flex flex-col">
+                    <div id="file-drop-zone"
+                        class="drop-zone p-6 text-center rounded-lg cursor-pointer flex-grow flex flex-col justify-center items-center">
+                        <label id="file-label" for="file-input"
+                            class="block text-sm font-medium text-gray-700 mb-2 cursor-pointer">여기에 파일을 드롭하거나 클릭하여
+                            선택</label>
+                        <input type="file" id="file-input" class="hidden" />
+                        <p id="file-list" class="text-xs text-gray-500 mt-2"></p>
+                    </div>
+                    <div id="file-input-container-2" class="mt-4 hidden">
+                        <label id="file-label-2" for="file-input-2"
+                            class="block text-sm font-medium text-gray-700 mb-2"></label>
+                        <input type="file" id="file-input-2"
+                            class="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-indigo-50 file:text-indigo-700 hover:file:bg-indigo-100" />
+                    </div>
+                    <div id="additional-inputs" class="mt-4">
+                        <label id="input-label" for="text-input"
+                            class="block text-sm font-medium text-gray-700 mb-2"></label>
+                        <input type="text" id="text-input"
+                            class="mt-1 block w-full px-3 py-2 bg-white border border-gray-300 rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm" />
+                    </div>
+                    <div class="mt-6">
+                        <button id="apply-button"
+                            class="w-full bg-green-500 hover:bg-green-600 text-white font-bold py-3 px-6 rounded-lg shadow-md transition-transform transform hover:scale-105">작업
+                            실행</button>
+                    </div>
+                </div>
+
+                <div id="preview-container"
+                    class="w-full md:w-2/3 bg-gray-50 p-4 rounded-lg border border-gray-200 hidden">
+                    <p id="preview-placeholder" class="text-center text-gray-500">파일을 선택하면 여기에 미리보기가 표시됩니다.</p>
+                    <div id="preview-area"
+                        class="max-h-[32rem] overflow-y-auto grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4 p-2">
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <div id="log-container" class="mt-6 hidden">
+            <h3 class="text-lg font-semibold text-gray-700">작업 로그</h3>
+            <pre id="log-output"
+                class="bg-gray-900 text-white text-sm rounded-lg p-4 mt-2 max-h-48 overflow-y-auto"></pre>
+        </div>
+    </div>
+
+    <div id="toast-container"></div>
+
+    <script src="https://unpkg.com/pdf-lib/dist/pdf-lib.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.11.338/pdf.min.js"></script>
+    <script src="{{ url_for('static', filename='main.js') }}" type="module" defer></script>
+
+</body>
+
+</html>
